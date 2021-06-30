@@ -22,6 +22,7 @@ if(ANDROID)
         PRIVATE -landroid)
 elseif(APPLE)
     list(APPEND RDOC_LIBRARIES
+        PRIVATE -lstdc++
         PRIVATE -liconv
         PRIVATE -lm
         PRIVATE -ldl)
@@ -563,7 +564,7 @@ link_directories(${CMAKE_CURRENT_BINARY_DIR})
 # On apple we need to pass the force_load parameter here - if we set it with LINK_FLAGS below
 # it gets applied too early (even if the -lrenderdoc_libentry is later)
 if(APPLE)
-    list(APPEND RDOC_LIBRARIES PRIVATE "-Wl,-force_load,librenderdoc_libentry.a -lrenderdoc_libentry")
+    list(APPEND RDOC_LIBRARIES PRIVATE "-Wl,-force_load,$<TARGET_FILE:renderdoc_libentry>")
 else()
     list(APPEND RDOC_LIBRARIES PRIVATE -lrenderdoc_libentry)
 endif()
@@ -604,7 +605,11 @@ if(APPLE)
 endif()
 
 if(ANDROID)
-    set_target_properties(renderdoc PROPERTIES LINK_FLAGS "-Wl,--undefined,force_include_libentry -Wl,--build-id")
+    set(RDOC_LINK_FLAGS "-Wl,--undefined,force_include_libentry -Wl,--build-id")
+    if(ENABLE_ASAN)
+        set(RDOC_LINK_FLAGS "${RDOC_LINK_FLAGS} -fsanitize=address")
+    endif()
+    set_target_properties(renderdoc PROPERTIES LINK_FLAGS "${RDOC_LINK_FLAGS}")
     # rename output library
     set_target_properties(renderdoc PROPERTIES OUTPUT_NAME "VkLayer_GLES_RenderDoc")
 

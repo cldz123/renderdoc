@@ -1715,15 +1715,23 @@ void VulkanPipelineStateViewer::addConstantBlockRow(ShaderReflection *shaderDeta
 
         if(descriptorBind && descriptorBind->inlineBlock)
         {
-          vecrange = QFormatStr("%1 - %2")
+          vecrange = QFormatStr("%1 - %2 bytes")
                          .arg(descriptorBind->byteOffset)
                          .arg(descriptorBind->byteOffset + descriptorBind->byteSize);
         }
         else if(!cblock->compileConstants)
         {
-          vecrange = QFormatStr("%1 - %2")
+          vecrange = QFormatStr("%1 - %2 bytes")
                          .arg(stage.pushConstantRangeByteOffset)
                          .arg(stage.pushConstantRangeByteOffset + stage.pushConstantRangeByteSize);
+
+          if(stage.pushConstantRangeByteOffset + stage.pushConstantRangeByteSize >
+             m_Ctx.CurVulkanPipelineState()->pushconsts.size())
+          {
+            filledSlot = false;
+            vecrange +=
+                tr(", only %1 bytes pushed").arg(m_Ctx.CurVulkanPipelineState()->pushconsts.size());
+          }
         }
       }
       else
@@ -2692,9 +2700,20 @@ void VulkanPipelineStateViewer::setState()
   else
     ui->logicOp->setText(lit("-"));
 
-  ui->depthEnabled->setPixmap(state.depthStencil.depthTestEnable ? tick : cross);
-  ui->depthFunc->setText(ToQStr(state.depthStencil.depthFunction));
-  ui->depthWrite->setPixmap(state.depthStencil.depthWriteEnable ? tick : cross);
+  if(state.depthStencil.depthTestEnable)
+  {
+    ui->depthEnabled->setPixmap(tick);
+    ui->depthFunc->setText(ToQStr(state.depthStencil.depthFunction));
+    ui->depthWrite->setPixmap(state.depthStencil.depthWriteEnable ? tick : cross);
+    ui->depthWrite->setText(QString());
+  }
+  else
+  {
+    ui->depthEnabled->setPixmap(cross);
+    ui->depthFunc->setText(tr("Disabled"));
+    ui->depthWrite->setPixmap(QPixmap());
+    ui->depthWrite->setText(tr("Disabled"));
+  }
 
   if(state.depthStencil.depthBoundsEnable)
   {

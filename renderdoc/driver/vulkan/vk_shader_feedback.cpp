@@ -557,8 +557,7 @@ void AnnotateShader(const ShaderReflection &refl, const SPIRVPatchData &patchDat
         editor.AddDecoration(rdcspv::OpDecorate(
             rdocGlobalVar, rdcspv::DecorationParam<rdcspv::Decoration::BuiltIn>(spvBuiltin)));
 
-        if(editor.EntryPointAllGlobals())
-          newGlobals.push_back(rdocGlobalVar);
+        newGlobals.push_back(rdocGlobalVar);
 
         editor.SetName(rdocGlobalVar, name);
 
@@ -798,10 +797,13 @@ void AnnotateShader(const ShaderReflection &refl, const SPIRVPatchData &patchDat
     while(it.opcode() == rdcspv::Op::Variable)
       ++it;
 
-    for(const rdcspv::Operation &op : locationGather)
+    if(funcId == entryID)
     {
-      editor.AddOperation(it, op);
-      ++it;
+      for(const rdcspv::Operation &op : locationGather)
+      {
+        editor.AddOperation(it, op);
+        ++it;
+      }
     }
 
     // now patch accesses in the function body
@@ -1310,7 +1312,7 @@ void VulkanReplay::FetchShaderFeedback(uint32_t eventId)
                           m_pDriver->GetDeviceEnabledFeatures().shaderInt64;
 
   if(Vulkan_Debug_DisableBufferDeviceAddress() ||
-     m_pDriver->GetDriverInfo().AMDBufferDeviceAddressBrokenDriver())
+     m_pDriver->GetDriverInfo().BufferDeviceAddressBrokenDriver())
     useBufferAddress = false;
 
   bool useBufferAddressKHR = m_pDriver->GetExtensions(NULL).ext_KHR_buffer_device_address;

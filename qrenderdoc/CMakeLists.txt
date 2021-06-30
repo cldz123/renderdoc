@@ -37,7 +37,6 @@ set(QMAKE_CONFIG "debug")
 set(QMAKE_LDFLAGS "")
 set(QMAKE_CXXFLAGS "")
 set(QMAKE_RPATHDIR "")
-set(QMAKE_OSX_DEPLOYMENT_TARGET "")
 set(SWIG_FLAGS "")
 
 if(RELEASE_MODE)
@@ -85,8 +84,7 @@ if(ENABLE_VULKAN)
 endif()
 
 if(APPLE)
-    set(QMAKE_OSX_DEPLOYMENT_TARGET ${CMAKE_OSX_DEPLOYMENT_TARGET})
-    set(QMAKE_RPATHDIR "@executable_path/../lib ")
+    set(QMAKE_RPATHDIR "@executable_path/../lib")
     add_custom_command(OUTPUT RenderDoc.icns
         COMMAND echo Creating OS X Icon
         COMMAND mkdir -p RenderDoc.iconset
@@ -123,8 +121,8 @@ endif()
 
 set( GENERATOR_MAKE "$(MAKE)" )
 set( GENERATOR_MAKE_PARAMS "" )
-if( CMAKE_MAKE_PROGRAM MATCHES "ninja$" )
-    message( "Ninja detected. Some projects compiled using add_custom_command like swig and QRenderDoc target will still be using make" )
+if( NOT CMAKE_MAKE_PROGRAM MATCHES "make$" )
+    message( "Non make generator detected. Some projects compiled using add_custom_command like swig and QRenderDoc target will still be using make" )
     set( GENERATOR_MAKE "make" )
 
     include(ProcessorCount)
@@ -137,13 +135,21 @@ if( CMAKE_MAKE_PROGRAM MATCHES "ninja$" )
     endif()
 endif()
 
+if(APPLE AND CMAKE_GENERATOR STREQUAL "Xcode")
+    if("${SHELL_CAPTURED_PATH}" STREQUAL "")
+        set(SHELL_CAPTURED_PATH $ENV{PATH} CACHE STRING "Shell PATH" FORCE)
+    endif()
+    message(STATUS "Using custom path for targets custom_swig and QRenderDoc")
+    set(SET_SYSTEM_PATH_COMMAND ${CMAKE_COMMAND} -E env PATH=${SHELL_CAPTURED_PATH})
+endif()
+
 # Compile our custom SWIG that will do scoped/strong enum classes
 ExternalProject_Add(custom_swig
     # using an URL to a zip directly so we don't clone the history etc
     URL ${RENDERDOC_SWIG_PACKAGE}
     BUILD_IN_SOURCE 1
-    CONFIGURE_COMMAND ./autogen.sh > /dev/null 2>&1
-    COMMAND CC=${SWIG_CONFIGURE_CC} CXX=${SWIG_CONFIGURE_CXX} CFLAGS=-fPIC CXXFLAGS=-fPIC ./configure --with-pcre=yes --prefix=${CMAKE_BINARY_DIR} > /dev/null
+    CONFIGURE_COMMAND ${SET_SYSTEM_PATH_COMMAND} ./autogen.sh > /dev/null 2>&1
+    COMMAND CC=${SWIG_CONFIGURE_CC} CXX=${SWIG_CONFIGURE_CXX} CFLAGS=-fPIC CXXFLAGS=-fPIC ${SET_SYSTEM_PATH_COMMAND} ./configure --with-pcre=yes --prefix=${CMAKE_BINARY_DIR} > /dev/null
     BUILD_COMMAND ${GENERATOR_MAKE} ${GENERATOR_MAKE_PARAMS} > /dev/null 2>&1
     INSTALL_COMMAND ${GENERATOR_MAKE} install > /dev/null 2>&1)
 
@@ -172,7 +178,6 @@ file(WRITE
      "QMAKE_CXXFLAGS+=${QMAKE_CXXFLAGS}\n"
      "QMAKE_LFLAGS+=${QMAKE_LDFLAGS}\n"
      "QMAKE_RPATHDIR+=${QMAKE_RPATHDIR}\n"
-     "QMAKE_MACOSX_DEPLOYMENT_TARGET=${QMAKE_OSX_DEPLOYMENT_TARGET}\n"
      "\n"
      "LIB_SUFFIX=${LIB_SUFFIX}\n"
      "LIB_SUBFOLDER_TRAIL_SLASH=${LIB_SUBFOLDER_TRAIL_SLASH}\n"
@@ -185,8 +190,14 @@ file(WRITE
      "LIBS+=${PYTHON_LINK}\n"
      "\n"
      "RENDERDOC_VERSION=${RENDERDOC_VERSION}\n"
-     "\n"
-     "OSX_ICONFILE=${CMAKE_CURRENT_BINARY_DIR}/RenderDoc.icns\n")
+     "\n")
+
+if(APPLE)
+    file(APPEND
+        ${CMAKE_BINARY_DIR}/qrenderdoc/qrenderdoc_cmake.pri
+        "OSX_ICONFILE=${CMAKE_CURRENT_BINARY_DIR}/RenderDoc.icns\n"
+        "QMAKE_MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}\n")
+endif()
 
 # Ignore warnings - qmake has no way to do this per-file, so we must do it globally
 if(CMAKE_COMPILER_IS_GNUCXX)
@@ -309,10 +320,18 @@ if(ENABLE_QRENDERDOC)
 # which causes CMake to rerun this target every time so that Qt
 # can do dependency checking and rebuild anything necessary.
 add_custom_command(OUTPUT QRenderDoc
-    COMMAND ${QMAKE_QT5_COMMAND} "CMAKE_DIR=${CMAKE_BINARY_DIR}" ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMAND ${SET_SYSTEM_PATH_COMMAND} ${QMAKE_QT5_COMMAND} "CMAKE_DIR=${CMAKE_BINARY_DIR}" ${CMAKE_CURRENT_SOURCE_DIR}
     COMMAND ${GENERATOR_MAKE} ${GENERATOR_MAKE_PARAMS}
     DEPENDS RenderDoc.icns)
 add_custom_target(build-qrenderdoc ALL DEPENDS QRenderDoc DEPENDS renderdoc DEPENDS swig-bindings)
+
+if(APPLE)
+    set_target_properties(build-qrenderdoc PROPERTIES XCODE_SCHEME_DEBUG_DOCUMENT_VERSIONING OFF)
+    set_target_properties(build-qrenderdoc PROPERTIES XCODE_SCHEME_EXECUTABLE ${CMAKE_BINARY_DIR}/bin/qrenderdoc.app)
+
+    file(GLOB_RECURSE QRD_CODE_FILES Code/*.[h|c|m]* Styles/*.[h|c|m]* Widgets/*.[h|c|m]* Windows/*.[h|c|m]*)
+    target_sources(build-qrenderdoc PRIVATE ${QRD_CODE_FILES})
+endif()
 
 install (PROGRAMS ${CMAKE_BINARY_DIR}/bin/qrenderdoc DESTINATION bin)
 

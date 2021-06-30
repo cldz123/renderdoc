@@ -552,11 +552,21 @@ ResourceId D3D12PipelineStateViewer::GetResource(RDTreeWidgetItem *item)
 
     if(cb.idx == ~0U)
     {
-      // unused cbuffer, open regular buffer viewer
-      const D3D12Pipe::ConstantBuffer &buf =
-          m_Ctx.CurD3D12PipelineState()->rootElements[cb.rootElement].constantBuffers[cb.reg];
+      if(cb.rootElement < m_Ctx.CurD3D12PipelineState()->rootElements.size())
+      {
+        const D3D12Pipe::RootSignatureRange &range =
+            m_Ctx.CurD3D12PipelineState()->rootElements[cb.rootElement];
 
-      return buf.resourceId;
+        if(cb.reg < range.constantBuffers.size())
+        {
+          // unused cbuffer, open regular buffer viewer
+          const D3D12Pipe::ConstantBuffer &buf = range.constantBuffers[cb.reg];
+
+          return buf.resourceId;
+        }
+      }
+
+      return ResourceId();
     }
 
     return m_Ctx.CurPipelineState().GetConstantBuffer(stage->stage, cb.idx, cb.arrayIdx).resourceId;
@@ -1940,9 +1950,20 @@ void D3D12PipelineStateViewer::setState()
                                .arg(state.outputMerger.blendState.blendFactor[2], 0, 'f', 2)
                                .arg(state.outputMerger.blendState.blendFactor[3], 0, 'f', 2));
 
-  ui->depthEnabled->setPixmap(state.outputMerger.depthStencilState.depthEnable ? tick : cross);
-  ui->depthFunc->setText(ToQStr(state.outputMerger.depthStencilState.depthFunction));
-  ui->depthWrite->setPixmap(state.outputMerger.depthStencilState.depthWrites ? tick : cross);
+  if(state.outputMerger.depthStencilState.depthEnable)
+  {
+    ui->depthEnabled->setPixmap(tick);
+    ui->depthFunc->setText(ToQStr(state.outputMerger.depthStencilState.depthFunction));
+    ui->depthWrite->setPixmap(state.outputMerger.depthStencilState.depthWrites ? tick : cross);
+    ui->depthWrite->setText(QString());
+  }
+  else
+  {
+    ui->depthEnabled->setPixmap(cross);
+    ui->depthFunc->setText(tr("Disabled"));
+    ui->depthWrite->setPixmap(QPixmap());
+    ui->depthWrite->setText(tr("Disabled"));
+  }
 
   if(state.outputMerger.depthStencilState.depthBoundsEnable)
   {
